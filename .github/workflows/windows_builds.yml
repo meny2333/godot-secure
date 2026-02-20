@@ -80,11 +80,12 @@ jobs:
           path: .
 
       - name: Run Godot Secure
-        shell: pwsh
+        shell: bash
         env:
           SCRIPT_AES256_ENCRYPTION_KEY: ${{ needs.generate-key.outputs.encryption_key }}
+          PYTHONIOENCODING: utf-8
         run: |
-          (Get-Content Godot_Secure_Camellia_256.py) -replace 'sys.exit\(1\)', 'sys.exit(0)' | Set-Content Godot_Secure_Camellia_256.py
+          sed -i 's/sys.exit(1)/sys.exit(0)/' Godot_Secure_Camellia_256.py
           echo "y" | python Godot_Secure_Camellia_256.py
 
       - name: Build Editor
@@ -120,11 +121,12 @@ jobs:
           path: .
 
       - name: Run Godot Secure
-        shell: pwsh
+        shell: bash
         env:
           SCRIPT_AES256_ENCRYPTION_KEY: ${{ needs.generate-key.outputs.encryption_key }}
+          PYTHONIOENCODING: utf-8
         run: |
-          (Get-Content Godot_Secure_Camellia_256.py) -replace 'sys.exit\(1\)', 'sys.exit(0)' | Set-Content Godot_Secure_Camellia_256.py
+          sed -i 's/sys.exit(1)/sys.exit(0)/' Godot_Secure_Camellia_256.py
           echo "y" | python Godot_Secure_Camellia_256.py
 
       - name: Build Template
