@@ -73,17 +73,6 @@ jobs:
           $Url = "https://raw.githubusercontent.com/KnifeXRage/Godot-Secure/$Branch/Godot%20Secure%20Camellia-256.py"
           Invoke-WebRequest -Uri $Url -OutFile "Godot_Secure_Camellia_256.py"
 
-      - name: Patch Godot Secure script for CI
-        shell: python
-        run: |
-          with open("Godot_Secure_Camellia_256.py", "r", encoding="utf-8") as f:
-            content = f.read()
-          content = content.replace('confirm = input(f"\\\\n\\\\n ⚠   {LogColors.WARNING}Start Godot Secure Operations on Godot Source Root {LogColors.ENDC}{LogColors.FAIL}(y/n)?{LogColors.ENDC}: ").strip().lower()', 'confirm = "y"')
-          content = content.replace('try:\\n            exit = input("\\\\nPress Enter key to exit...")\\n        except EOFError:\\n            pass', 'pass')
-          content = content.replace('sys.exit(1)', 'sys.exit(0)')
-          with open("Godot_Secure_Camellia_256.py", "w", encoding="utf-8") as f:
-            f.write(content)
-
       - name: Download encryption key
         uses: actions/download-artifact@v4
         with:
@@ -92,9 +81,10 @@ jobs:
 
       - name: Run Godot Secure
         shell: pwsh
+        env:
+          SCRIPT_AES256_ENCRYPTION_KEY: ${{ needs.generate-key.outputs.encryption_key }}
         run: |
-          $env:SCRIPT_AES256_ENCRYPTION_KEY = Get-Content godot.gdkey -Raw
-          python Godot_Secure_Camellia_256.py
+          echo "y" | python Godot_Secure_Camellia_256.py
 
       - name: Build Editor
         shell: bash
@@ -122,17 +112,6 @@ jobs:
           $Url = "https://raw.githubusercontent.com/KnifeXRage/Godot-Secure/$Branch/Godot%20Secure%20Camellia-256.py"
           Invoke-WebRequest -Uri $Url -OutFile "Godot_Secure_Camellia_256.py"
 
-      - name: Patch Godot Secure script for CI
-        shell: python
-        run: |
-          with open("Godot_Secure_Camellia_256.py", "r", encoding="utf-8") as f:
-            content = f.read()
-          content = content.replace('confirm = input(f"\\\\n\\\\n ⚠   {LogColors.WARNING}Start Godot Secure Operations on Godot Source Root {LogColors.ENDC}{LogColors.FAIL}(y/n)?{LogColors.ENDC}: ").strip().lower()', 'confirm = "y"')
-          content = content.replace('try:\\n            exit = input("\\\\nPress Enter key to exit...")\\n        except EOFError:\\n            pass', 'pass')
-          content = content.replace('sys.exit(1)', 'sys.exit(0)')
-          with open("Godot_Secure_Camellia_256.py", "w", encoding="utf-8") as f:
-            f.write(content)
-
       - name: Download encryption key
         uses: actions/download-artifact@v4
         with:
@@ -141,9 +120,10 @@ jobs:
 
       - name: Run Godot Secure
         shell: pwsh
+        env:
+          SCRIPT_AES256_ENCRYPTION_KEY: ${{ needs.generate-key.outputs.encryption_key }}
         run: |
-          $env:SCRIPT_AES256_ENCRYPTION_KEY = Get-Content godot.gdkey -Raw
-          python Godot_Secure_Camellia_256.py
+          echo "y" | python Godot_Secure_Camellia_256.py
 
       - name: Build Template
         shell: bash
