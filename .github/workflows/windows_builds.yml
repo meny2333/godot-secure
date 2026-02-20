@@ -57,9 +57,26 @@ jobs:
           path: godot.gdkey
           retention-days: 1
 
-  build-editor:
+  build:
     needs: generate-key
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: editor-llvm
+            target: editor
+            flags: use_llvm=yes
+          - name: editor-mingw
+            target: editor
+            flags: use_mingw=yes
+          - name: template-llvm
+            target: template_release
+            flags: use_llvm=yes
+          - name: template-mingw
+            target: template_release
+            flags: use_mingw=yes
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -72,7 +89,6 @@ jobs:
           $Branch = "${{ inputs.secure_script_branch || 'main' }}"
           $Url = "https://raw.githubusercontent.com/KnifeXRage/Godot-Secure/$Branch/Godot%20Secure%20Camellia-256.py"
           Invoke-WebRequest -Uri $Url -OutFile "Godot_Secure_Camellia_256.py"
-
       - name: Download encryption key
         uses: actions/download-artifact@v4
         with:
@@ -87,54 +103,15 @@ jobs:
         run: |
           sed -i 's/sys.exit(1)/sys.exit(0)/' Godot_Secure_Camellia_256.py
           echo "y" | python Godot_Secure_Camellia_256.py
+      - name: Setup Python and SCons
+        run: pip install scons
 
-      - name: Build Editor
+      - name: Build ${{ matrix.name }}
         shell: bash
-        run: scons platform=windows target=editor use_llvm=yes use_mingw=yes
+        run: scons platform=windows target=${{ matrix.target }} ${{ matrix.flags }} d3d12=no
 
-      - name: Upload Editor Artifact
+      - name: Upload ${{ matrix.name }} Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: godot-editor-windows
-          path: bin/
-
-  build-template:
-    needs: generate-key
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Download Godot Secure script
-        shell: pwsh
-        run: |
-          $Branch = "${{ inputs.secure_script_branch || 'main' }}"
-          $Url = "https://raw.githubusercontent.com/KnifeXRage/Godot-Secure/$Branch/Godot%20Secure%20Camellia-256.py"
-          Invoke-WebRequest -Uri $Url -OutFile "Godot_Secure_Camellia_256.py"
-
-      - name: Download encryption key
-        uses: actions/download-artifact@v4
-        with:
-          name: encryption-key
-          path: .
-
-      - name: Run Godot Secure
-        shell: bash
-        env:
-          SCRIPT_AES256_ENCRYPTION_KEY: ${{ needs.generate-key.outputs.encryption_key }}
-          PYTHONIOENCODING: utf-8
-        run: |
-          sed -i 's/sys.exit(1)/sys.exit(0)/' Godot_Secure_Camellia_256.py
-          echo "y" | python Godot_Secure_Camellia_256.py
-
-      - name: Build Template
-        shell: bash
-        run: scons platform=windows target=template_release use_llvm=yes use_mingw=yes
-
-      - name: Upload Template Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: godot-template-windows
+          name: godot-${{ matrix.name }}-windows
           path: bin/
