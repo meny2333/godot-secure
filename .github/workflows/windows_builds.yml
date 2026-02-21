@@ -2,19 +2,14 @@ name: 🏁 Windows Builds
 
 on:
   workflow_dispatch:
-    inputs:
-      target:
-        description: 'Build target'
-        type: choice
-        options:
-          - editor
-          - template_release
-        default: 'editor'
-        required: true
 
 jobs:
   build:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [editor, template_release]
 
     steps:
       - name: Checkout
@@ -25,11 +20,11 @@ jobs:
       - name: Setup SCons
         run: pip install scons
 
-      - name: Build Godot
-        run: scons platform=windows target=${{ inputs.target }} d3d12=no
+      - name: Build ${{ matrix.target }}
+        run: scons platform=windows target=${{ matrix.target }} d3d12=no
 
-      - name: Upload artifact
+      - name: Upload ${{ matrix.target }} artifact
         uses: actions/upload-artifact@v4
         with:
-          name: godot-${{ inputs.target }}-windows
+          name: godot-${{ matrix.target }}-windows
           path: bin/
