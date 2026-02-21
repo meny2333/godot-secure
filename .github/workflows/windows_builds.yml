@@ -21,7 +21,7 @@ jobs:
         run: pip install scons
 
       - name: Build ${{ matrix.target }}
-        run: scons platform=windows target=${{ matrix.target }} d3d12=no
+        run: scons platform=windows target=${{ matrix.target }} d3d12=no disable_path_overrides=no
 
       - name: Upload ${{ matrix.target }} artifact
         uses: actions/upload-artifact@v4
