@@ -105,8 +105,10 @@ jobs:
 
       - name: Prepare artifact
         run: |
+          rm -rf bin/obj || true
           strip bin/godot.*
           chmod +x bin/godot.*
+          ls -l bin/
 
       - name: Upload ${{ matrix.target }} artifact
         uses: actions/upload-artifact@v4

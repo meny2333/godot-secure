@@ -122,6 +122,12 @@ jobs:
             Write-Host "找到可执行文件：$($exeFiles.Name)"
           }
 
+      - name: Prepare artifacts (exclude obj)
+        shell: pwsh
+        run: |
+          if (Test-Path "bin\obj") { Remove-Item -Recurse -Force "bin\obj" }
+          Get-ChildItem bin/
+
       - name: Upload ${{ matrix.target }} artifact
         uses: actions/upload-artifact@v4
         with:

@@ -103,6 +103,11 @@ jobs:
             echo "  - $(basename $f) ($size)"
           done
 
+      - name: Prepare artifacts (exclude obj)
+        run: |
+          rm -rf bin/obj || true
+          ls -l bin/
+
       - name: Upload ${{ matrix.target }} artifact
         uses: actions/upload-artifact@v4
         with:
