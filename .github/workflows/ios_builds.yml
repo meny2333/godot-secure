@@ -1,6 +1,8 @@
-name: 🍏 iOS Builds
+name: iOS Builds
+
 on:
   workflow_call:
+  workflow_dispatch:
 
 # Global Settings
 env:
@@ -10,43 +12,25 @@ env:
     tests=no
     debug_symbols=no
 
-env:
-  SCONS_FLAGS: >-
-    dev_mode=yes
-    module_text_server_fb_enabled=yes
-    debug_symbols=no
-
 jobs:
-  ios-template:
+  build:
     runs-on: macos-latest
-    name: Template (target=template_release)
-    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [editor, template_release]
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
-      - name: Restore Godot build cache
-        uses: ./.github/actions/godot-cache-restore
-        continue-on-error: true
+      - name: Select Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.0.1.app
 
-<<<<<<< HEAD
-      - name: Setup Python and SCons
-        uses: ./.github/actions/godot-deps
-
-      - name: Compilation (arm64)
-        uses: ./.github/actions/godot-build
-        with:
-          scons-flags: ${{ env.SCONS_FLAGS }}
-=======
-      - name: Restore Godot build cache
-        uses: ./.github/actions/godot-cache-restore
-        continue-on-error: true
-
-      - name: Setup Python and SCons
-        uses: ./.github/actions/godot-deps
+      - name: Setup SCons
+        run: pip install scons
 
       - name: Load Encryption Key
         id: load_key
@@ -59,36 +43,71 @@ jobs:
           key=$(cat godot.gdkey | tr -d '[:space:]')
           
           if [ ${#key} -ne 64 ]; then
-            echo "错误：密钥长度不正确"
+            echo "错误：密钥长度不正确。期望64字符，实际 ${#key} 字符"
+            exit 1
+          fi
+          
+          if ! [[ "$key" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            echo "错误：密钥包含无效字符，必须是64位十六进制字符串"
             exit 1
           fi
           
           key=$(echo "$key" | tr '[:upper:]' '[:lower:]')
+          
           echo "SCRIPT_AES256_ENCRYPTION_KEY=$key" >> $GITHUB_ENV
+          
+          masked="${key:0:8}...${key: -8}"
+          echo "密钥验证通过：$masked (长度: ${#key})"
+          echo "key_loaded=true" >> $GITHUB_OUTPUT
 
-      - name: Compilation (arm64)
-        uses: ./.github/actions/godot-build
-        with:
-          scons-flags: ${{ env.SCONS_FLAGS }} script_encryption_key="$SCRIPT_AES256_ENCRYPTION_KEY"
->>>>>>> def084d67d (expect obj/ & fix apk ipa)
-          platform: ios
-          target: template_release
-
-      - name: Save Godot build cache
-        uses: ./.github/actions/godot-cache-save
-        continue-on-error: true
-
-<<<<<<< HEAD
-      - name: Upload artifact
-        uses: ./.github/actions/upload-artifact
-=======
-      - name: Prepare artifacts (exclude obj)
+      - name: Verify Key Transfer
         run: |
-          rm -rf bin/obj || true
-          ls -l bin/
+          if [ -z "$SCRIPT_AES256_ENCRYPTION_KEY" ]; then
+            echo "错误：SCRIPT_AES256_ENCRYPTION_KEY 环境变量未设置"
+            exit 1
+          fi
+          
+          key="$SCRIPT_AES256_ENCRYPTION_KEY"
+          
+          if [ ${#key} -ne 64 ]; then
+            echo "错误：环境变量中的密钥长度不正确"
+            exit 1
+          fi
+          
+          masked="${key:0:8}...${key: -8}"
+          echo "环境变量验证通过：$masked (长度: ${#key})"
+          echo "密钥传递成功，准备开始构建..."
 
-      - name: Upload artifact
-        uses: ./.github/actions/upload-artifact
+      - name: Build ${{ matrix.target }}
+        run: |
+          echo "开始构建 ${{ matrix.target }}..."
+          echo "使用加密密钥构建模板（支持加密PCK解密）"
+          
+          scons platform=ios target=${{ matrix.target }} script_encryption_key="$SCRIPT_AES256_ENCRYPTION_KEY"
+
+      - name: Verify Build Output
+        run: |
+          binPath="bin/"
+          if [ ! -d "$binPath" ]; then
+            echo "错误：构建目录不存在"
+            exit 1
+          fi
+          
+          files=$(find "$binPath" -type f)
+          if [ -z "$files" ]; then
+            echo "错误：未找到构建产物"
+            exit 1
+          fi
+          
+          echo "构建产物列表："
+          for f in $files; do
+            size=$(du -h "$f" | cut -f1)
+            echo "  - $(basename $f) ($size)"
+          done
+
+      - name: Upload ${{ matrix.target }} artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: ios-template
->>>>>>> def084d67d (expect obj/ & fix apk ipa)
+          name: godot-${{ matrix.target }}-ios
+          path: bin/
+          if-no-files-found: error

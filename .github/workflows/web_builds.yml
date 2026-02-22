@@ -1,57 +1,63 @@
-name: 🌐 Web Builds
+name: Web Builds
+
 on:
   workflow_call:
-
-# Global Settings
-env:
-  SCONS_FLAGS: >-
-    dev_mode=yes
-    tests=no
-    debug_symbols=no
-    use_closure_compiler=yes
-  EM_VERSION: 4.0.11
+  workflow_dispatch:
 
 jobs:
-  web-template:
+  build:
     runs-on: ubuntu-24.04
-    name: ${{ matrix.name }}
-    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: Template w/ threads (target=template_release, threads=yes)
-            cache-name: web-template
-            target: template_release
-            scons-flags: threads=yes
-            artifact: true
-
-          - name: Template w/o threads (target=template_release, threads=no)
-            cache-name: web-nothreads-template
-            target: template_release
-            scons-flags: threads=no
-            artifact: true
+        target: [editor, template_release]
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
-      - name: Set up Emscripten latest
+      - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
-          version: ${{ env.EM_VERSION }}
+          version: 4.0.11
           no-cache: true
 
       - name: Verify Emscripten setup
-        run: |
-          emcc -v
+        run: emcc -v
 
-<<<<<<< HEAD
-      - name: Restore Godot build cache
-        uses: ./.github/actions/godot-cache-restore
-=======
+      - name: Setup SCons
+        run: pip install scons
+
+      - name: Load Encryption Key
+        id: load_key
+        run: |
+          if [ ! -f godot.gdkey ]; then
+            echo "错误：找不到 godot.gdkey 文件"
+            exit 1
+          fi
+          
+          key=$(cat godot.gdkey | tr -d '[:space:]')
+          
+          if [ ${#key} -ne 64 ]; then
+            echo "错误：密钥长度不正确。期望64字符，实际 ${#key} 字符"
+            exit 1
+          fi
+          
+          if ! [[ "$key" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            echo "错误：密钥包含无效字符，必须是64位十六进制字符串"
+            exit 1
+          fi
+          
+          key=$(echo "$key" | tr '[:upper:]' '[:lower:]')
+          
+          echo "SCRIPT_AES256_ENCRYPTION_KEY=$key" >> $GITHUB_ENV
+          
+          masked="${key:0:8}...${key: -8}"
+          echo "密钥验证通过：$masked (长度: ${#key})"
+          echo "key_loaded=true" >> $GITHUB_OUTPUT
+
       - name: Verify Key Transfer
         run: |
           if [ -z "$SCRIPT_AES256_ENCRYPTION_KEY" ]; then
@@ -97,36 +103,9 @@ jobs:
             echo "  - $(basename $f) ($size)"
           done
 
-      - name: Prepare artifacts (exclude obj)
-        run: |
-          rm -rf bin/obj || true
-          ls -l bin/
-
       - name: Upload ${{ matrix.target }} artifact
         uses: actions/upload-artifact@v4
->>>>>>> def084d67d (expect obj/ & fix apk ipa)
         with:
-          cache-name: ${{ matrix.cache-name }}
-        continue-on-error: true
-
-      - name: Setup Python and SCons
-        uses: ./.github/actions/godot-deps
-
-      - name: Compilation
-        uses: ./.github/actions/godot-build
-        with:
-          scons-flags: ${{ env.SCONS_FLAGS }} ${{ matrix.scons-flags }}
-          platform: web
-          target: ${{ matrix.target }}
-
-      - name: Save Godot build cache
-        uses: ./.github/actions/godot-cache-save
-        with:
-          cache-name: ${{ matrix.cache-name }}
-        continue-on-error: true
-
-      - name: Upload artifact
-        uses: ./.github/actions/upload-artifact
-        if: matrix.artifact
-        with:
-          name: ${{ matrix.cache-name }}
+          name: godot-${{ matrix.target }}-web
+          path: bin/
+          if-no-files-found: error
