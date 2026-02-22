@@ -1,140 +1,126 @@
-name: 🏁 Windows Builds (Godot Secure)
+name: 🏁 Windows Builds
 
 on:
-  workflow_call:
-    inputs:
-      encryption_key:
-        description: 'Encryption key (64 hex chars)'
-        type: string
-        required: false
-      secure_script_branch:
-        description: 'Godot Secure script branch'
-        type: string
-        default: 'main'
-    secrets:
-      GODOT_ENCRYPTION_KEY:
-        required: false
-  
   workflow_dispatch:
-    inputs:
-      encryption_key:
-        description: 'Encryption key (64 hex chars, leave empty to auto-generate or use secret)'
-        required: false
-      secure_script_branch:
-        description: 'Godot Secure script branch'
-        default: 'main'
-        required: true
 
 jobs:
-  generate-key:
-    runs-on: ubuntu-latest
-    outputs:
-      encryption_key: ${{ steps.key.outputs.encryption_key }}
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [editor, template_release]
+
     steps:
-      - name: Generate or load encryption key
-        id: key
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup SCons
+        run: pip install scons
+
+      - name: Load Encryption Key
+        id: load_key
+        shell: pwsh
         run: |
-          if [ -n "${{ inputs.encryption_key }}" ]; then
-            KEY="${{ inputs.encryption_key }}"
-          elif [ -n "${{ secrets.GODOT_ENCRYPTION_KEY }}" ]; then
-            KEY="${{ secrets.GODOT_ENCRYPTION_KEY }}"
-          else
-            KEY=$(openssl rand -hex 32)
-          fi
-          
-          if [[ ! "$KEY" =~ ^[a-f0-9]{64}$ ]]; then
-            echo "::error::Invalid encryption key format"
+          # 检查密钥文件是否存在
+          if (-not (Test-Path godot.gdkey)) {
+            Write-Error "错误：找不到 godot.gdkey 文件"
             exit 1
-          fi
+          }
           
-          echo "encryption_key=$KEY" >> $GITHUB_OUTPUT
-          echo "::add-mask::$KEY"
-          echo "$KEY" > godot.gdkey
+          # 读取密钥并清理
+          $key = Get-Content godot.gdkey -Raw
+          $key = $key.Trim()
           
-      - uses: actions/upload-artifact@v4
-        with:
-          name: encryption-key
-          path: godot.gdkey
-          retention-days: 1
-
-  build-editor:
-    needs: generate-key
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Download Godot Secure script
+          # 验证密钥长度（应为64字符）
+          if ($key.Length -ne 64) {
+            Write-Error "错误：密钥长度不正确。期望64字符，实际 $($key.Length) 字符"
+            exit 1
+          }
+          
+          # 验证密钥是否为有效十六进制
+          if ($key -notmatch '^[0-9a-fA-F]{64}$') {
+            Write-Error "错误：密钥包含无效字符，必须是64位十六进制字符串"
+            exit 1
+          }
+          
+          # 转换为小写（Godot要求）
+          $key = $key.ToLower()
+          
+          # 设置输出和环境变量
+          "SCRIPT_AES256_ENCRYPTION_KEY=$key" >> $env:GITHUB_ENV
+          
+          # 显示密钥前8位和后8位用于调试（隐藏完整密钥）
+          $masked = $key.Substring(0, 8) + "..." + $key.Substring(56, 8)
+          Write-Host "密钥验证通过：$masked (长度: $($key.Length))"
+          
+          # 设置步骤输出
+          "key_loaded=true" >> $env:GITHUB_OUTPUT
+      - name: Verify Key Transfer
         shell: pwsh
         run: |
-          $Branch = "${{ inputs.secure_script_branch || 'main' }}"
-          $Url = "https://raw.githubusercontent.com/KnifeXRage/Godot-Secure/$Branch/Godot%20Secure%20Camellia-256.py"
-          Invoke-WebRequest -Uri $Url -OutFile "Godot_Secure_Camellia_256.py"
-
-      - name: Download encryption key
-        uses: actions/download-artifact@v4
-        with:
-          name: encryption-key
-          path: .
-
-      - name: Run Godot Secure
-        shell: bash
-        env:
-          SCRIPT_AES256_ENCRYPTION_KEY: ${{ needs.generate-key.outputs.encryption_key }}
-          PYTHONIOENCODING: utf-8
-        run: |
-          sed -i 's/sys.exit(1)/sys.exit(0)/' Godot_Secure_Camellia_256.py
-          echo "y" | python Godot_Secure_Camellia_256.py
-
-      - name: Build Editor
-        shell: bash
-        run: scons platform=windows target=editor use_llvm=yes use_mingw=yes
-
-      - name: Upload Editor Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: godot-editor-windows
-          path: bin/
-
-  build-template:
-    needs: generate-key
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Download Godot Secure script
+          # 验证环境变量是否正确设置
+          if (-not $env:SCRIPT_AES256_ENCRYPTION_KEY) {
+            Write-Error "错误：SCRIPT_AES256_ENCRYPTION_KEY 环境变量未设置"
+            exit 1
+          }
+          
+          $key = $env:SCRIPT_AES256_ENCRYPTION_KEY
+          
+          # 再次验证长度
+          if ($key.Length -ne 64) {
+            Write-Error "错误：环境变量中的密钥长度不正确"
+            exit 1
+          }
+          
+          # 显示掩码后的密钥确认传递成功
+          $masked = $key.Substring(0, 8) + "..." + $key.Substring(56, 8)
+          Write-Host "环境变量验证通过：$masked (长度: $($key.Length))"
+          Write-Host "密钥传递成功，准备开始构建..."
+      - name: Build ${{ matrix.target }}
         shell: pwsh
         run: |
-          $Branch = "${{ inputs.secure_script_branch || 'main' }}"
-          $Url = "https://raw.githubusercontent.com/KnifeXRage/Godot-Secure/$Branch/Godot%20Secure%20Camellia-256.py"
-          Invoke-WebRequest -Uri $Url -OutFile "Godot_Secure_Camellia_256.py"
-
-      - name: Download encryption key
-        uses: actions/download-artifact@v4
-        with:
-          name: encryption-key
-          path: .
-
-      - name: Run Godot Secure
-        shell: bash
-        env:
-          SCRIPT_AES256_ENCRYPTION_KEY: ${{ needs.generate-key.outputs.encryption_key }}
-          PYTHONIOENCODING: utf-8
+          Write-Host "开始构建 ${{ matrix.target }}..."
+          Write-Host "使用加密密钥构建模板（支持加密PCK解密）"
+          
+          scons platform=windows target=${{ matrix.target }} d3d12=no disable_path_overrides=no script_encryption_key="$env:SCRIPT_AES256_ENCRYPTION_KEY"
+      - name: Verify Build Output
+        shell: pwsh
         run: |
-          sed -i 's/sys.exit(1)/sys.exit(0)/' Godot_Secure_Camellia_256.py
-          echo "y" | python Godot_Secure_Camellia_256.py
-
-      - name: Build Template
-        shell: bash
-        run: scons platform=windows target=template_release use_llvm=yes use_mingw=yes
-
-      - name: Upload Template Artifact
+          # 检查构建产物是否存在
+          $binPath = "bin/"
+          if (-not (Test-Path $binPath)) {
+            Write-Error "错误：构建目录不存在"
+            exit 1
+          }
+          
+          # 列出构建产物
+          $files = Get-ChildItem $binPath -File
+          if ($files.Count -eq 0) {
+            Write-Error "错误：未找到构建产物"
+            exit 1
+          }
+          
+          Write-Host "构建产物列表："
+          $files | ForEach-Object { 
+            $size = [math]::Round($_.Length / 1MB, 2)
+            Write-Host "  - $($_.Name) (${size} MB)" 
+          }
+          
+          # 检查是否包含预期的可执行文件
+          $exePattern = "godot.*windows.*${{ matrix.target }}.*exe"
+          $exeFiles = $files | Where-Object { $_.Name -match $exePattern }
+          
+          if ($exeFiles.Count -eq 0) {
+            Write-Warning "警告：未找到匹配模式 $exePattern 的可执行文件"
+          } else {
+            Write-Host "找到可执行文件：$($exeFiles.Name)"
+          }
+      - name: Upload ${{ matrix.target }} artifact
         uses: actions/upload-artifact@v4
         with:
-          name: godot-template-windows
+          name: godot-${{ matrix.target }}-windows
           path: bin/
+          if-no-files-found: error
