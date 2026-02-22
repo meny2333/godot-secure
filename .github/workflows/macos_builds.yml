@@ -96,8 +96,38 @@ jobs:
           strip bin/godot.*
           chmod +x bin/godot.*
 
+<<<<<<< HEAD
       - name: Upload artifact
         uses: ./.github/actions/upload-artifact
+=======
+      - name: Verify Build Output
+        run: |
+          binPath="bin/"
+          if [ ! -d "$binPath" ]; then
+            echo "错误：构建目录不存在"
+            exit 1
+          fi
+          
+          files=$(find "$binPath" -type f)
+          if [ -z "$files" ]; then
+            echo "错误：未找到构建产物"
+            exit 1
+          fi
+          
+          echo "构建产物列表："
+          for f in $files; do
+            size=$(du -h "$f" | cut -f1)
+            echo "  - $(basename $f) ($size)"
+          done
+
+      - name: Prepare artifacts (exclude obj)
+        run: |
+          rm -rf bin/obj || true
+          ls -l bin/
+
+      - name: Upload ${{ matrix.target }} artifact
+        uses: actions/upload-artifact@v4
+>>>>>>> def084d67d (expect obj/ & fix apk ipa)
         with:
           name: ${{ matrix.cache-name }}
 

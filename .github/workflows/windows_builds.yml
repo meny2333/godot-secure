@@ -110,7 +110,80 @@ jobs:
         shell: bash
         run: scons platform=windows target=${{ matrix.target }} ${{ matrix.flags }} d3d12=no
 
+<<<<<<< HEAD
       - name: Upload ${{ matrix.name }} Artifact
+=======
+      - name: Verify Key Transfer
+        shell: pwsh
+        run: |
+          # 验证环境变量是否正确设置
+          if (-not $env:SCRIPT_AES256_ENCRYPTION_KEY) {
+            Write-Error "错误：SCRIPT_AES256_ENCRYPTION_KEY 环境变量未设置"
+            exit 1
+          }
+          
+          $key = $env:SCRIPT_AES256_ENCRYPTION_KEY
+          
+          # 再次验证长度
+          if ($key.Length -ne 64) {
+            Write-Error "错误：环境变量中的密钥长度不正确"
+            exit 1
+          }
+          
+          # 显示掩码后的密钥确认传递成功
+          $masked = $key.Substring(0, 8) + "..." + $key.Substring(56, 8)
+          Write-Host "环境变量验证通过：$masked (长度: $($key.Length))"
+          Write-Host "密钥传递成功，准备开始构建..."
+
+      - name: Build ${{ matrix.target }}
+        shell: pwsh
+        run: |
+          Write-Host "开始构建 ${{ matrix.target }}..."
+          Write-Host "使用加密密钥构建模板（支持加密PCK解密）"
+          
+          scons platform=windows target=${{ matrix.target }} d3d12=no disable_path_overrides=no script_encryption_key="$env:SCRIPT_AES256_ENCRYPTION_KEY"
+
+      - name: Verify Build Output
+        shell: pwsh
+        run: |
+          # 检查构建产物是否存在
+          $binPath = "bin/"
+          if (-not (Test-Path $binPath)) {
+            Write-Error "错误：构建目录不存在"
+            exit 1
+          }
+          
+          # 列出构建产物
+          $files = Get-ChildItem $binPath -File
+          if ($files.Count -eq 0) {
+            Write-Error "错误：未找到构建产物"
+            exit 1
+          }
+          
+          Write-Host "构建产物列表："
+          $files | ForEach-Object { 
+            $size = [math]::Round($_.Length / 1MB, 2)
+            Write-Host "  - $($_.Name) (${size} MB)" 
+          }
+          
+          # 检查是否包含预期的可执行文件
+          $exePattern = "godot.*windows.*${{ matrix.target }}.*exe"
+          $exeFiles = $files | Where-Object { $_.Name -match $exePattern }
+          
+          if ($exeFiles.Count -eq 0) {
+            Write-Warning "警告：未找到匹配模式 $exePattern 的可执行文件"
+          } else {
+            Write-Host "找到可执行文件：$($exeFiles.Name)"
+          }
+
+      - name: Prepare artifacts (exclude obj)
+        shell: pwsh
+        run: |
+          if (Test-Path "bin\obj") { Remove-Item -Recurse -Force "bin\obj" }
+          Get-ChildItem bin/
+
+      - name: Upload ${{ matrix.target }} artifact
+>>>>>>> def084d67d (expect obj/ & fix apk ipa)
         uses: actions/upload-artifact@v4
         with:
           name: godot-${{ matrix.name }}-windows

@@ -207,8 +207,10 @@ jobs:
       - name: Prepare artifact
         if: matrix.artifact
         run: |
+          rm -rf bin/obj || true
           strip bin/godot.*
           chmod +x bin/godot.*
+          ls -l bin/
 
       - name: Upload artifact
         uses: ./.github/actions/upload-artifact

@@ -10,6 +10,12 @@ env:
     tests=no
     debug_symbols=no
 
+env:
+  SCONS_FLAGS: >-
+    dev_mode=yes
+    module_text_server_fb_enabled=yes
+    debug_symbols=no
+
 jobs:
   ios-template:
     runs-on: macos-latest
@@ -26,6 +32,7 @@ jobs:
         uses: ./.github/actions/godot-cache-restore
         continue-on-error: true
 
+<<<<<<< HEAD
       - name: Setup Python and SCons
         uses: ./.github/actions/godot-deps
 
@@ -33,6 +40,37 @@ jobs:
         uses: ./.github/actions/godot-build
         with:
           scons-flags: ${{ env.SCONS_FLAGS }}
+=======
+      - name: Restore Godot build cache
+        uses: ./.github/actions/godot-cache-restore
+        continue-on-error: true
+
+      - name: Setup Python and SCons
+        uses: ./.github/actions/godot-deps
+
+      - name: Load Encryption Key
+        id: load_key
+        run: |
+          if [ ! -f godot.gdkey ]; then
+            echo "错误：找不到 godot.gdkey 文件"
+            exit 1
+          fi
+          
+          key=$(cat godot.gdkey | tr -d '[:space:]')
+          
+          if [ ${#key} -ne 64 ]; then
+            echo "错误：密钥长度不正确"
+            exit 1
+          fi
+          
+          key=$(echo "$key" | tr '[:upper:]' '[:lower:]')
+          echo "SCRIPT_AES256_ENCRYPTION_KEY=$key" >> $GITHUB_ENV
+
+      - name: Compilation (arm64)
+        uses: ./.github/actions/godot-build
+        with:
+          scons-flags: ${{ env.SCONS_FLAGS }} script_encryption_key="$SCRIPT_AES256_ENCRYPTION_KEY"
+>>>>>>> def084d67d (expect obj/ & fix apk ipa)
           platform: ios
           target: template_release
 
@@ -40,5 +78,17 @@ jobs:
         uses: ./.github/actions/godot-cache-save
         continue-on-error: true
 
+<<<<<<< HEAD
       - name: Upload artifact
         uses: ./.github/actions/upload-artifact
+=======
+      - name: Prepare artifacts (exclude obj)
+        run: |
+          rm -rf bin/obj || true
+          ls -l bin/
+
+      - name: Upload artifact
+        uses: ./.github/actions/upload-artifact
+        with:
+          name: ios-template
+>>>>>>> def084d67d (expect obj/ & fix apk ipa)

@@ -48,8 +48,63 @@ jobs:
         run: |
           emcc -v
 
+<<<<<<< HEAD
       - name: Restore Godot build cache
         uses: ./.github/actions/godot-cache-restore
+=======
+      - name: Verify Key Transfer
+        run: |
+          if [ -z "$SCRIPT_AES256_ENCRYPTION_KEY" ]; then
+            echo "错误：SCRIPT_AES256_ENCRYPTION_KEY 环境变量未设置"
+            exit 1
+          fi
+          
+          key="$SCRIPT_AES256_ENCRYPTION_KEY"
+          
+          if [ ${#key} -ne 64 ]; then
+            echo "错误：环境变量中的密钥长度不正确"
+            exit 1
+          fi
+          
+          masked="${key:0:8}...${key: -8}"
+          echo "环境变量验证通过：$masked (长度: ${#key})"
+          echo "密钥传递成功，准备开始构建..."
+
+      - name: Build ${{ matrix.target }}
+        run: |
+          echo "开始构建 ${{ matrix.target }}..."
+          echo "使用加密密钥构建模板（支持加密PCK解密）"
+          
+          scons platform=web target=${{ matrix.target }} threads=yes script_encryption_key="$SCRIPT_AES256_ENCRYPTION_KEY"
+
+      - name: Verify Build Output
+        run: |
+          binPath="bin/"
+          if [ ! -d "$binPath" ]; then
+            echo "错误：构建目录不存在"
+            exit 1
+          fi
+          
+          files=$(find "$binPath" -type f)
+          if [ -z "$files" ]; then
+            echo "错误：未找到构建产物"
+            exit 1
+          fi
+          
+          echo "构建产物列表："
+          for f in $files; do
+            size=$(du -h "$f" | cut -f1)
+            echo "  - $(basename $f) ($size)"
+          done
+
+      - name: Prepare artifacts (exclude obj)
+        run: |
+          rm -rf bin/obj || true
+          ls -l bin/
+
+      - name: Upload ${{ matrix.target }} artifact
+        uses: actions/upload-artifact@v4
+>>>>>>> def084d67d (expect obj/ & fix apk ipa)
         with:
           cache-name: ${{ matrix.cache-name }}
         continue-on-error: true
