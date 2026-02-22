@@ -1431,7 +1431,7 @@ void ProjectExportDialog::_bind_methods() {
 }
 
 ProjectExportDialog::ProjectExportDialog() {
-	set_title(TTR("Export"));
+set_title(TTR("Export With Godot Secure (Camellia-256)"));
 	set_clamp_to_embedder(true);
 
 	VBoxContainer *main_vb = memnew(VBoxContainer);

@@ -33,7 +33,7 @@
 #include "core/crypto/crypto_core.h"
 #include "core/io/file_access.h"
 
-#define ENCRYPTED_HEADER_MAGIC 0x43454447
+#define ENCRYPTED_HEADER_MAGIC 0x4C4B4659  // Generated Tag: "YFKL"
 
 class FileAccessEncrypted : public FileAccess {
 	GDSOFTCLASS(FileAccessEncrypted, FileAccess);
