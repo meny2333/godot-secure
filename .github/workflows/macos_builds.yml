@@ -73,12 +73,12 @@ jobs:
       - name: Build ${{ matrix.target }} (x86_64)
         run: |
           echo "开始构建 ${{ matrix.target }} (x86_64)..."
-          scons platform=macos target=${{ matrix.target }} arch=x86_64 script_encryption_key="$SCRIPT_AES256_ENCRYPTION_KEY"
+          scons platform=macos target=${{ matrix.target }} arch=x86_64 vulkan=no script_encryption_key="$SCRIPT_AES256_ENCRYPTION_KEY"
 
       - name: Build ${{ matrix.target }} (arm64)
         run: |
           echo "开始构建 ${{ matrix.target }} (arm64)..."
-          scons platform=macos target=${{ matrix.target }} arch=arm64 script_encryption_key="$SCRIPT_AES256_ENCRYPTION_KEY"
+          scons platform=macos target=${{ matrix.target }} arch=arm64 vulkan=no script_encryption_key="$SCRIPT_AES256_ENCRYPTION_KEY"
 
       - name: Create Universal Binary
         run: |
