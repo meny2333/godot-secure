@@ -34,7 +34,7 @@ jobs:
             runs-on: windows-latest
             target: editor
             platform: windows
-            scons-flags: windows_subsystem=console
+            scons-flags: windows_subsystem=console d3d12=no
             artifact: true
 
           - name: macOS Editor
@@ -137,7 +137,22 @@ jobs:
       - name: Patch camellia header for cross-platform build
         shell: bash
         run: |
-          sed -i 's|#include <mbedtls/private/camellia.h>|#define MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS\n#include <mbedtls/private/camellia.h>|' core/crypto/crypto_core.cpp
+          python -c "
+          import pathlib
+          p = pathlib.Path('core/crypto/crypto_core.cpp')
+          t = p.read_text()
+          camellia_include = '#define MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS\n#include <mbedtls/private/camellia.h>'
+          if camellia_include not in t:
+              marker = '#include <mbedtls/base64.h>'
+              if marker not in t:
+                  raise SystemExit('Could not find the mbedTLS include anchor')
+              t = t.replace(marker, marker + '\n' + camellia_include, 1)
+          p.write_text(t)
+          "
+          if ! grep -Fq '#include <mbedtls/private/camellia.h>' core/crypto/crypto_core.cpp; then
+            echo '::error::Failed to patch camellia header'
+            exit 1
+          fi
 
       - name: Restore Godot build cache
         uses: ./.github/actions/godot-cache-restore
