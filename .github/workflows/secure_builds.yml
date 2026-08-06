@@ -134,6 +134,11 @@ jobs:
             exit 1
           fi
 
+      - name: Patch camellia header for cross-platform build
+        shell: bash
+        run: |
+          sed -i 's|#include <mbedtls/private/camellia.h>|#define MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS\n#include <mbedtls/private/camellia.h>|' core/crypto/crypto_core.cpp
+
       - name: Restore Godot build cache
         uses: ./.github/actions/godot-cache-restore
         with:
