@@ -121,13 +121,14 @@ jobs:
       - name: Apply Godot Secure (Camellia-256)
         shell: bash
         env:
+          PYTHONUTF8: 1
           SCRIPT_AES256_ENCRYPTION_KEY: ${{ secrets.SCRIPT_AES256_ENCRYPTION_KEY }}
         run: |
           python -c "import urllib.request; urllib.request.urlretrieve('${{ env.SECURE_SCRIPT_URL }}', 'godot_secure.py')" || {
             echo "::error::Failed to download Godot Secure script"
             exit 1
           }
-          printf 'y\nn\nn\n' | python godot_secure.py . || true
+          printf 'y\nn\nn\nn\n' | python godot_secure.py . || true
           if [ ! -f "core/crypto/security_token.h" ]; then
             echo "::error::Godot Secure script failed to create security_token.h"
             exit 1
