@@ -10,6 +10,7 @@ env:
   SCONS_FLAGS: >-
     dev_mode=yes
     module_text_server_fb_enabled=yes
+  SCRIPT_AES256_ENCRYPTION_KEY: ${{ secrets.SCRIPT_AES256_ENCRYPTION_KEY }}
   SECURE_SCRIPT_URL: https://github.com/KnifeXRage/Godot-Secure/releases/download/Beta-v5_Universal/Godot.Secure.Camellia-256.Universal.v5-Beta.py
 
 jobs:
@@ -33,6 +34,14 @@ jobs:
             cache-name: secure-windows-editor
             runs-on: windows-latest
             target: editor
+            platform: windows
+            scons-flags: windows_subsystem=console d3d12=no
+            artifact: true
+
+          - name: Windows Release Template
+            cache-name: secure-windows-template-release
+            runs-on: windows-latest
+            target: template_release
             platform: windows
             scons-flags: windows_subsystem=console d3d12=no
             artifact: true
