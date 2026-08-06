@@ -1,0 +1,205 @@
+name: 🔐 Secure Builds
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: secure-builds|${{ github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  SCONS_FLAGS: >-
+    dev_mode=yes
+    module_text_server_fb_enabled=yes
+  SECURE_SCRIPT_URL: https://github.com/KnifeXRage/Godot-Secure/releases/download/Beta-v5_Universal/Godot.Secure.Camellia-256.Universal.v5-Beta.py
+
+jobs:
+  secure-build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux Editor
+            cache-name: secure-linux-editor
+            runs-on: ubuntu-22.04
+            target: editor
+            platform: linuxbsd
+            scons-flags: compiledb=yes
+            artifact: true
+
+          - name: Windows Editor
+            cache-name: secure-windows-editor
+            runs-on: windows-latest
+            target: editor
+            platform: windows
+            scons-flags: windows_subsystem=console
+            artifact: true
+
+          - name: macOS Editor
+            cache-name: secure-macos-editor
+            runs-on: macos-26
+            target: editor
+            platform: macos
+            artifact: true
+
+          - name: Android arm64 Template
+            cache-name: secure-android-arm64
+            runs-on: ubuntu-24.04
+            target: template_debug
+            platform: android
+            scons-flags: arch=arm64
+            artifact: true
+
+          - name: iOS Template
+            cache-name: secure-ios
+            runs-on: macos-26
+            target: template_release
+            platform: ios
+            artifact: true
+
+          - name: Web 64-bit Template
+            cache-name: secure-web
+            runs-on: ubuntu-24.04
+            target: template_release
+            platform: web
+            scons-flags: threads=yes arch=wasm64 use_closure_compiler=yes
+            artifact: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Set up Java 17
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Emscripten
+        if: matrix.platform == 'web'
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: 4.0.11
+          no-cache: true
+
+      - name: Setup Python and SCons
+        uses: ./.github/actions/godot-deps
+
+      - name: Download pre-built AccessKit
+        if: matrix.platform == 'linuxbsd' || matrix.platform == 'windows' || matrix.platform == 'macos'
+        shell: sh
+        id: accesskit-sdk
+        run: |
+          if python ./misc/scripts/install_accesskit.py; then
+            echo "ACCESSKIT_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::AccessKit SDK installation failed, building without AccessKit support."
+            echo "ACCESSKIT_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download pre-built ANGLE
+        if: matrix.platform == 'windows' || matrix.platform == 'macos'
+        shell: sh
+        id: angle-sdk
+        run: |
+          if python ./misc/scripts/install_angle.py; then
+            echo "ANGLE_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::ANGLE SDK installation failed, building without ANGLE support."
+            echo "ANGLE_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download Swappy
+        if: matrix.platform == 'android'
+        run: python ./misc/scripts/install_swappy_android.py
+
+      - name: Apply Godot Secure (Camellia-256)
+        shell: bash
+        env:
+          SCRIPT_AES256_ENCRYPTION_KEY: ${{ secrets.SCRIPT_AES256_ENCRYPTION_KEY }}
+        run: |
+          python -c "import urllib.request; urllib.request.urlretrieve('${{ env.SECURE_SCRIPT_URL }}', 'godot_secure.py')" || {
+            echo "::error::Failed to download Godot Secure script"
+            exit 1
+          }
+          printf 'y\nn\nn\n' | python godot_secure.py . || true
+          if [ ! -f "core/crypto/security_token.h" ]; then
+            echo "::error::Godot Secure script failed to create security_token.h"
+            exit 1
+          fi
+
+      - name: Restore Godot build cache
+        uses: ./.github/actions/godot-cache-restore
+        with:
+          cache-name: ${{ matrix.cache-name }}
+        continue-on-error: true
+
+      - name: Compilation (macOS x86_64)
+        if: matrix.platform == 'macos'
+        uses: ./.github/actions/godot-build
+        with:
+          scons-flags: ${{ env.SCONS_FLAGS }} ${{ matrix.scons-flags }} arch=x86_64 accesskit=${{ steps.accesskit-sdk.outputs.ACCESSKIT_ENABLED }} angle=${{ steps.angle-sdk.outputs.ANGLE_ENABLED }} metal=no
+          platform: macos
+          target: ${{ matrix.target }}
+
+      - name: Compilation (macOS arm64)
+        if: matrix.platform == 'macos'
+        uses: ./.github/actions/godot-build
+        with:
+          scons-flags: ${{ env.SCONS_FLAGS }} ${{ matrix.scons-flags }} arch=arm64 accesskit=${{ steps.accesskit-sdk.outputs.ACCESSKIT_ENABLED }} angle=${{ steps.angle-sdk.outputs.ANGLE_ENABLED }}
+          platform: macos
+          target: ${{ matrix.target }}
+
+      - name: Compilation
+        if: matrix.platform != 'macos'
+        uses: ./.github/actions/godot-build
+        with:
+          scons-flags: ${{ env.SCONS_FLAGS }} ${{ matrix.scons-flags }}
+          platform: ${{ matrix.platform }}
+          target: ${{ matrix.target }}
+
+      - name: Save Godot build cache
+        uses: ./.github/actions/godot-cache-save
+        with:
+          cache-name: ${{ matrix.cache-name }}
+        continue-on-error: true
+
+      - name: Prepare artifact (macOS)
+        if: matrix.platform == 'macos' && matrix.artifact
+        run: |
+          lipo -create ./bin/godot.macos.${{ matrix.target }}.x86_64 ./bin/godot.macos.${{ matrix.target }}.arm64 -output ./bin/godot.macos.${{ matrix.target }}.universal
+          rm ./bin/godot.macos.${{ matrix.target }}.x86_64 ./bin/godot.macos.${{ matrix.target }}.arm64
+          rm -rf ./bin/build_deps
+          strip bin/godot.*
+          chmod +x bin/godot.*
+
+      - name: Prepare artifact (Linux)
+        if: matrix.platform == 'linuxbsd' && matrix.artifact
+        run: |
+          rm -rf ./bin/build_deps
+          strip bin/godot.*
+          chmod +x bin/godot.*
+
+      - name: Prepare artifact (Windows)
+        if: matrix.platform == 'windows' && matrix.artifact
+        run: |
+          Remove-Item bin/build_deps -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item bin/* -Include *.exp,*.lib,*.pdb -Force
+
+      - name: Generate Android templates
+        if: matrix.platform == 'android' && matrix.target == 'template_debug'
+        run: |
+          cd platform/android/java
+          ./gradlew generateGodotTemplates
+          cd ../../..
+
+      - name: Upload artifact
+        uses: ./.github/actions/upload-artifact
+        if: matrix.artifact
+        with:
+          name: gdkey-${{ matrix.cache-name }}
