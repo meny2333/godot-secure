@@ -30,6 +30,13 @@ jobs:
             scons-flags: compiledb=yes
             artifact: true
 
+          - name: Linux Release Template
+            cache-name: secure-linux-template-release
+            runs-on: ubuntu-22.04
+            target: template_release
+            platform: linuxbsd
+            artifact: true
+
           - name: Windows Editor
             cache-name: secure-windows-editor
             runs-on: windows-latest
