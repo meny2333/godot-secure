@@ -144,7 +144,8 @@ jobs:
             echo "::error::Failed to download Godot Secure script"
             exit 1
           }
-          printf 'y\nn\nn\nn\n' | python godot_secure.py . || true
+          secure_token="$(printf '%s' "$SCRIPT_AES256_ENCRYPTION_KEY" | sha256sum | cut -c1-64)"
+          printf 'y\ny\nGDPC\nGDEC\ny\n%s\nn\n' "$secure_token" | python godot_secure.py . || true
           if [ ! -f "core/crypto/security_token.h" ]; then
             echo "::error::Godot Secure script failed to create security_token.h"
             exit 1
