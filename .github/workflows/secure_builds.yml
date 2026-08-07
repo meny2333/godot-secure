@@ -145,7 +145,12 @@ jobs:
             exit 1
           }
           secure_token="$(printf '%s' "$SCRIPT_AES256_ENCRYPTION_KEY" | sha256sum | cut -c1-64)"
-          printf 'y\ny\nGDPC\nGDEC\ny\n%s\nn\n' "$secure_token" | python godot_secure.py . || true
+          printf 'y\nn\nn\nn\n' | python godot_secure.py . || true
+          token_bytes=""
+          while IFS= read -r byte; do token_bytes+="0x${byte}, "; done < <(printf '%s' "$secure_token" | fold -w2)
+          sed -E -i 's/^#define PACK_HEADER_MAGIC .*/#define PACK_HEADER_MAGIC 0x43504447/' core/io/file_access_pack.h
+          sed -E -i 's/^#define ENCRYPTED_HEADER_MAGIC .*/#define ENCRYPTED_HEADER_MAGIC 0x43454447/' core/io/file_access_encrypted.h
+          sed -E -i "s|^    static const uint8_t TOKEN\[32\].*|    static const uint8_t TOKEN[32] = { $token_bytes };|" core/crypto/security_token.h
           if [ ! -f "core/crypto/security_token.h" ]; then
             echo "::error::Godot Secure script failed to create security_token.h"
             exit 1
